@@ -91,7 +91,11 @@ def sample_descriptors(keypoints, descriptors, s: int = 8):
         descriptors.reshape(b, c, -1), p=2, dim=1)
     return descriptors
 
-
+def export_debug(input_batch):
+    import numpy as np
+    i = input_batch.cpu().data.numpy()
+    i = np.array(i, dtype=np.float32)
+    i.tofile("debug/output.bin", format="f")
 class SuperPoint(nn.Module):
     """SuperPoint Convolutional Detector and Descriptor
 
@@ -145,6 +149,7 @@ class SuperPoint(nn.Module):
     def forward(self, data):
         """ Compute keypoints, scores, descriptors for image """
         # Shared Encoder
+        #print(data['image'].shape)
         x = self.relu(self.conv1a(data['image']))
         x = self.relu(self.conv1b(x))
         x = self.pool(x)
@@ -189,6 +194,11 @@ class SuperPoint(nn.Module):
         # Compute the dense descriptors
         cDa = self.relu(self.convDa(x))
         descriptors = self.convDb(cDa)
+
+        #print(descriptors.shape)
+        #export_debug(descriptors)
+        #exit()
+
         descriptors = torch.nn.functional.normalize(descriptors, p=2, dim=1)
 
         # Extract descriptors
