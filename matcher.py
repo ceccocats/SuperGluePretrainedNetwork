@@ -55,6 +55,11 @@ for i in range(len(files)):
     data = {k: [i.cpu() for i in v] for k, v in data.items()}
     features[imageFile] = data
 
+    plot_image_pair([image0, image0])
+    plot_keypoints(pred["keypoints"][0].cpu(), pred["keypoints"][0].cpu(), color='k', ps=4)
+    plot_keypoints(pred["keypoints"][0].cpu(), pred["keypoints"][0].cpu(), color='w', ps=2)
+    plt.show()
+
 
 # # match all
 # maxDist = 20.0

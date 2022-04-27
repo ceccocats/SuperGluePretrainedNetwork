@@ -41,6 +41,7 @@
 # %BANNER_END%
 
 from pathlib import Path
+from tomlkit import key
 import torch
 from torch import nn
 
@@ -77,6 +78,52 @@ def top_k_keypoints(keypoints, scores, k: int):
     return keypoints[indices], scores
 
 
+
+def bilinear_grid_sample(im, grid, align_corners=False):
+    n, c, h, w = im.shape
+    gn, gh, gw, _ = grid.shape
+    assert n == gn
+    
+    x = grid[:, :, :, 0]
+    y = grid[:, :, :, 1]
+
+    if align_corners:
+        x = ((x + 1) / 2) * (w - 1)
+        y = ((y + 1) / 2) * (h - 1)
+    else:
+        x = ((x + 1) * w - 1) / 2
+        y = ((y + 1) * h - 1) / 2
+
+    x = x.view(n, -1)
+    y = y.view(n, -1)
+
+    x0 = torch.floor(x).long()
+    y0 = torch.floor(y).long()
+    x1 = x0 + 1
+    y1 = y0 + 1
+
+    wa = ((x1 - x) * (y1 - y)).unsqueeze(1)
+    wb = ((x1 - x) * (y - y0)).unsqueeze(1)
+    wc = ((x - x0) * (y1 - y)).unsqueeze(1)
+    wd = ((x - x0) * (y - y0)).unsqueeze(1)
+
+
+    padded_h = h
+    padded_w = w
+    im_padded = im.view(n, c, -1)
+
+    x0_y0 = (x0 + y0 * padded_w).unsqueeze(1).expand(-1, c, -1)
+    x0_y1 = (x0 + y1 * padded_w).unsqueeze(1).expand(-1, c, -1)
+    x1_y0 = (x1 + y0 * padded_w).unsqueeze(1).expand(-1, c, -1)
+    x1_y1 = (x1 + y1 * padded_w).unsqueeze(1).expand(-1, c, -1)
+    
+    Ia = torch.gather(im_padded, 2, x0_y0)
+    Ib = torch.gather(im_padded, 2, x0_y1)
+    Ic = torch.gather(im_padded, 2, x1_y0)
+    Id = torch.gather(im_padded, 2, x1_y1)
+    return (Ia * wa + Ib * wb + Ic * wc + Id * wd).reshape(n, c, gh, gw)
+
+
 def sample_descriptors(keypoints, descriptors, s: int = 8):
     """ Interpolate descriptors at keypoint locations """
     b, c, h, w = descriptors.shape
@@ -86,16 +133,19 @@ def sample_descriptors(keypoints, descriptors, s: int = 8):
     keypoints = keypoints*2 - 1  # normalize to (-1, 1)
     args = {'align_corners': True} if torch.__version__ >= '1.3' else {}
     descriptors = torch.nn.functional.grid_sample(
-        descriptors, keypoints.view(b, 1, -1, 2), mode='bilinear', **args)
+        descriptors, keypoints.view(b, 1, -1, 2), mode='bilinear', **args)    
+    #descriptors = bilinear_grid_sample(
+    #    descriptors.cpu(), keypoints.view(b, 1, -1, 2).cpu(), align_corners=True)    
+    
     descriptors = torch.nn.functional.normalize(
         descriptors.reshape(b, c, -1), p=2, dim=1)
     return descriptors
 
-def export_debug(input_batch):
+def export_debug(input_batch, name):
     import numpy as np
     i = input_batch.cpu().data.numpy()
     i = np.array(i, dtype=np.float32)
-    i.tofile("debug/output.bin", format="f")
+    i.tofile(name, format="f")
 class SuperPoint(nn.Module):
     """SuperPoint Convolutional Detector and Descriptor
 
@@ -195,15 +245,18 @@ class SuperPoint(nn.Module):
         cDa = self.relu(self.convDa(x))
         descriptors = self.convDb(cDa)
 
-        #print(descriptors.shape)
-        #export_debug(descriptors)
-        #exit()
-
         descriptors = torch.nn.functional.normalize(descriptors, p=2, dim=1)
 
         # Extract descriptors
         descriptors = [sample_descriptors(k[None], d[None], 8)[0]
                        for k, d in zip(keypoints, descriptors)]
+
+        print(keypoints)
+        print(keypoints[0].shape)
+        print(scores[0].shape)
+        print(descriptors[0].shape)
+        export_debug(descriptors[0], "debug/output.bin")
+        #exit()
 
         return {
             'keypoints': keypoints,
