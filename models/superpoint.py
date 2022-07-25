@@ -198,6 +198,8 @@ class SuperPoint(nn.Module):
 
     def forward(self, data):
         """ Compute keypoints, scores, descriptors for image """
+        #export_debug(data, "input.bin")
+        
         # Shared Encoder
         #print(data['image'].shape)
         x = self.relu(self.conv1a(data['image']))
@@ -220,6 +222,9 @@ class SuperPoint(nn.Module):
         scores = scores.permute(0, 2, 3, 1).reshape(b, h, w, 8, 8)
         scores = scores.permute(0, 1, 3, 2, 4).reshape(b, h*8, w*8)
         scores = simple_nms(scores, self.config['nms_radius'])
+
+        #export_debug(scores, "scores.bin")
+        #return scores
 
         # Extract keypoints
         keypoints = [
@@ -250,13 +255,6 @@ class SuperPoint(nn.Module):
         # Extract descriptors
         descriptors = [sample_descriptors(k[None], d[None], 8)[0]
                        for k, d in zip(keypoints, descriptors)]
-
-        print(keypoints)
-        print(keypoints[0].shape)
-        print(scores[0].shape)
-        print(descriptors[0].shape)
-        export_debug(descriptors[0], "debug/output.bin")
-        #exit()
 
         return {
             'keypoints': keypoints,
