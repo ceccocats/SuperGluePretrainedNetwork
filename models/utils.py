@@ -51,7 +51,7 @@ import cv2
 import torch
 import matplotlib.pyplot as plt
 import matplotlib
-#matplotlib.use('Agg')
+matplotlib.use('Agg')
 
 
 class AverageTimer:

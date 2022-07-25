@@ -12,8 +12,16 @@ from models.utils import *
 import matplotlib.cm as cm
 import json
 import math
+import struct
 
-from export import *
+import sys
+
+def bin_write(f, data):
+    data =data.flatten()
+    fmt = 'f'*len(data)
+    bin = struct.pack(fmt, *data)
+    f.write(bin)
+
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print('Running inference on device \"{}\"'.format(device))
@@ -33,12 +41,23 @@ config = {
 superpoint = SuperPoint(config.get('superpoint', {})).eval().to(device)
 superglue = SuperGlue(config.get('superglue', {})).eval().to(device)
 
-input_dir = "assets/freiburg_sequence/"
+
+input_dir = sys.argv[1]
+print(input_dir)
 files = sorted( [ i for i in os.listdir(input_dir) if i.endswith("png") ] )
+files_json = sorted( [ i for i in os.listdir(input_dir) if i.endswith("json") ] )
+assert len(files) == len(files_json)
 
 features = {}
+
+poses2d = []
+
 for i in range(len(files)):
  
+    f_json = open(input_dir + "/" + files_json[i])
+    pose_json = json.load(f_json)
+    poses2d.append((pose_json["pose"]["px"], pose_json["pose"]["py"]))
+
     imageFile = files[i]
     #print("extract: ", imageFile)
     print("extract: ", i, "of", len(files))
@@ -46,20 +65,32 @@ for i in range(len(files)):
     image0, inp0, scales0 = read_image(input_dir + "/" + imageFile, device, [848, 800], 0, False)
 
     data = {'image': inp0}
-
-    if(i==0):
-        export_to_tkDNN(superpoint, data, "superpoint")
-    
     pred = superpoint(data)
     data = {**data, **pred}
     data = {k: [i.cpu() for i in v] for k, v in data.items()}
-    features[imageFile] = data
+    
 
-    plot_image_pair([image0, image0])
-    plot_keypoints(pred["keypoints"][0].cpu(), pred["keypoints"][0].cpu(), color='k', ps=4)
-    plot_keypoints(pred["keypoints"][0].cpu(), pred["keypoints"][0].cpu(), color='w', ps=2)
-    plt.show()
+    kpts = data["keypoints"][0].numpy()    
+    scores = data["scores"][0].numpy()
+    desc = data["descriptors"][0].numpy() 
 
+    print(np.shape(desc))
+    print(np.shape(desc[:,0]))
+    print(desc[:,0])
+
+    out = input_dir + "/" + files[i] + ".feats"
+    print(out)
+
+    f = open(out, "wb")
+    bin_write(f, np.array(np.shape(kpts), dtype=np.float32))
+    bin_write(f, kpts)
+    bin_write(f, np.array(np.shape(scores), dtype=np.float32))
+    bin_write(f, scores)
+    bin_write(f, np.array(np.shape(desc), dtype=np.float32))
+    bin_write(f, desc)
+    f.close()
+
+    
 
 # # match all
 # maxDist = 20.0
