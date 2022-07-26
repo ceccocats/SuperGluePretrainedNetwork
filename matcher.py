@@ -28,9 +28,9 @@ print('Running inference on device \"{}\"'.format(device))
 
 config = {
     'superpoint': {
-        'nms_radius': 4,
-        'keypoint_threshold': 0.005,
-        'max_keypoints': 1024
+        'nms_radius': 3,
+        'keypoint_threshold': 0.001,
+        'max_keypoints': 2048, #1024,
     },
     'superglue': {
         'weights': 'outdoor',
